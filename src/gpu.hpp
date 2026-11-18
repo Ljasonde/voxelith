@@ -42,7 +42,7 @@ struct Gpu {
     std::array<Frame,2> frames{};
     std::vector<VkImage> images;
     std::vector<VkSemaphore> presented;
-    bool validation{},vsync{},gui{},indirect{};
+    bool validation{},vsync{},gui{},indirect{},rayCapable{};
     uint32_t sequence{};
     VkPipelineLayout triangleLayout{}; VkPipeline triangle{};
     void init(int width,int height,bool interactive,bool validate,bool sync);
@@ -50,10 +50,10 @@ struct Gpu {
     void startGui();
     void trianglePass(Frame& f);
     Buffer buffer(Lifetime& owner,size_t bytes,VkBufferUsageFlags usage,bool host);
-    Image image(Lifetime& owner,VkFormat fmt,VkImageUsageFlags usage,VkImageAspectFlags aspect);
+    Image image(Lifetime& owner,VkFormat fmt,VkImageUsageFlags usage,VkImageAspectFlags aspect,VkExtent2D extent={});
     VkShaderModule module(Lifetime& owner,const char* file);
     VkPipeline graphics(Lifetime& owner,VkPipelineLayout layout,const char* vertex,const char* fragment,
-                        VkPipelineVertexInputStateCreateInfo inputs,bool depth);
+                        VkPipelineVertexInputStateCreateInfo inputs,bool depth,int pass=0);
     bool draw(const std::function<void(Frame&)>& record,const std::filesystem::path& capture={},double* gpuMs=nullptr);
     void render(Frame& f,bool depth,bool load=false);
     ~Gpu() { if(device) vkDeviceWaitIdle(device); targets.clear(); life.clear(); }

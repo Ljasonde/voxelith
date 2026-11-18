@@ -71,13 +71,27 @@ void Gpu::init(int width,int height,bool interactive,bool validate,bool sync) {
     f12={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,&f13}; f12.drawIndirectCount=indirect;
     f13={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES}; f13.dynamicRendering=f13.synchronization2=VK_TRUE;
     VkPhysicalDeviceFeatures core{}; core.multiDrawIndirect=indirect;
-    const char* swapExt=VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    std::vector<const char*> devExtensions;
+    if(surface)devExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    uint32_t extCount=0;check(vkEnumerateDeviceExtensionProperties(physical,nullptr,&extCount,nullptr));
+    std::vector<VkExtensionProperties> ext(extCount);check(vkEnumerateDeviceExtensionProperties(physical,nullptr,&extCount,ext.data()));
+    const char* required[]={VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,VK_KHR_RAY_QUERY_EXTENSION_NAME,VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME};
+    rayCapable=true;
+    for(auto name:required)rayCapable &= std::any_of(ext.begin(),ext.end(),[&](auto& e){return strcmp(e.extensionName,name)==0;});
+    VkPhysicalDeviceRayQueryFeaturesKHR rq{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR as{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,&rq};
+    VkPhysicalDeviceBufferDeviceAddressFeatures address{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,&as};
+    VkPhysicalDeviceFeatures2 features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,&address};vkGetPhysicalDeviceFeatures2(physical,&features);
+    rayCapable=rayCapable&&rq.rayQuery&&as.accelerationStructure&&address.bufferDeviceAddress;
+    if(rayCapable){devExtensions.insert(devExtensions.end(),std::begin(required),std::end(required));
+        as={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,&rq};as.accelerationStructure=VK_TRUE;
+        f13.pNext=&as;f12.bufferDeviceAddress=VK_TRUE;}
     VkDeviceCreateInfo dc{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,&f12}; dc.pEnabledFeatures=&core; dc.queueCreateInfoCount=1; dc.pQueueCreateInfos=&qc;
-    if(surface){dc.enabledExtensionCount=1; dc.ppEnabledExtensionNames=&swapExt;}
+    dc.enabledExtensionCount=uint32_t(devExtensions.size());dc.ppEnabledExtensionNames=devExtensions.data();
     check(vkCreateDevice(physical,&dc,nullptr,&device)); volkLoadDevice(device); life.add([this]{vkDestroyDevice(device,nullptr);});
     vkGetDeviceQueue(device,family,0,&queue);
     VmaVulkanFunctions loader{}; loader.vkGetInstanceProcAddr=vkGetInstanceProcAddr; loader.vkGetDeviceProcAddr=vkGetDeviceProcAddr;
-    VmaAllocatorCreateInfo ac{}; ac.physicalDevice=physical; ac.device=device; ac.instance=instance; ac.vulkanApiVersion=VK_API_VERSION_1_3; ac.pVulkanFunctions=&loader;
+    VmaAllocatorCreateInfo ac{}; if(rayCapable)ac.flags=VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT; ac.physicalDevice=physical; ac.device=device; ac.instance=instance; ac.vulkanApiVersion=VK_API_VERSION_1_3; ac.pVulkanFunctions=&loader;
     check(vmaCreateAllocator(&ac,&allocator)); life.add([this]{vmaDestroyAllocator(allocator);});
     VkCommandPoolCreateInfo pc{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO}; pc.queueFamilyIndex=family; pc.flags=VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     check(vkCreateCommandPool(device,&pc,nullptr,&pool)); life.add([this]{vkDestroyCommandPool(device,pool,nullptr);});
@@ -105,9 +119,9 @@ Buffer Gpu::buffer(Lifetime& owner,size_t bytes,VkBufferUsageFlags usage,bool ho
     VmaAllocationInfo ai{}; check(vmaCreateBuffer(allocator,&ci,&ac,&result.handle,&result.allocation,&ai)); result.mapped=ai.pMappedData;
     owner.add([this,result]{vmaDestroyBuffer(allocator,result.handle,result.allocation);}); return result;
 }
-Image Gpu::image(Lifetime& owner,VkFormat fmt,VkImageUsageFlags usage,VkImageAspectFlags aspect){
+Image Gpu::image(Lifetime& owner,VkFormat fmt,VkImageUsageFlags usage,VkImageAspectFlags aspect,VkExtent2D extent){
     Image r; VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO}; ci.imageType=VK_IMAGE_TYPE_2D; ci.format=fmt;
-    ci.extent={size.width,size.height,1}; ci.mipLevels=ci.arrayLayers=1; ci.samples=VK_SAMPLE_COUNT_1_BIT; ci.usage=usage;
+    if(!extent.width)extent=size; ci.extent={extent.width,extent.height,1}; ci.mipLevels=ci.arrayLayers=1; ci.samples=VK_SAMPLE_COUNT_1_BIT; ci.usage=usage;
     VmaAllocationCreateInfo ac{}; ac.usage=VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     check(vmaCreateImage(allocator,&ci,&ac,&r.handle,&r.allocation,nullptr));
     owner.add([this,r]{vmaDestroyImage(allocator,r.handle,r.allocation);});
@@ -158,7 +172,7 @@ VkShaderModule Gpu::module(Lifetime& owner,const char* file){
     VkShaderModuleCreateInfo ci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO}; ci.codeSize=bytes; ci.pCode=data.data();
     VkShaderModule m; check(vkCreateShaderModule(device,&ci,nullptr,&m)); owner.add([this,m]{vkDestroyShaderModule(device,m,nullptr);}); return m;
 }
-VkPipeline Gpu::graphics(Lifetime& owner,VkPipelineLayout layout,const char* vs,const char* fs,VkPipelineVertexInputStateCreateInfo inputs,bool depth){
+VkPipeline Gpu::graphics(Lifetime& owner,VkPipelineLayout layout,const char* vs,const char* fs,VkPipelineVertexInputStateCreateInfo inputs,bool depth,int pass){
     Lifetime modules; VkPipelineShaderStageCreateInfo stages[2]{};
     for(int i=0;i<2;i++){stages[i].sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO; stages[i].stage=i?VK_SHADER_STAGE_FRAGMENT_BIT:VK_SHADER_STAGE_VERTEX_BIT;
         stages[i].module=module(modules,i?fs:vs); stages[i].pName="main";}
@@ -172,6 +186,12 @@ VkPipeline Gpu::graphics(Lifetime& owner,VkPipelineLayout layout,const char* vs,
     VkDynamicState states[]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO}; dyn.dynamicStateCount=2; dyn.pDynamicStates=states;
     VkPipelineRenderingCreateInfo r{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO}; r.colorAttachmentCount=1; r.pColorAttachmentFormats=&format;
+    VkFormat mrt[]={VK_FORMAT_R8G8B8A8_UNORM,VK_FORMAT_R8G8B8A8_UNORM};
+    VkPipelineColorBlendAttachmentState blend[]={ba,ba};
+    if(pass==1){r.colorAttachmentCount=bs.attachmentCount=2;r.pColorAttachmentFormats=mrt;bs.pAttachments=blend;}
+    if(pass==2){r.colorAttachmentCount=bs.attachmentCount=0;}
+    VkFormat hdr=VK_FORMAT_R16G16B16A16_SFLOAT;
+    if(pass==3)r.pColorAttachmentFormats=&hdr;
     if(depth) r.depthAttachmentFormat=VK_FORMAT_D32_SFLOAT;
     VkGraphicsPipelineCreateInfo ci{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,&r}; ci.stageCount=2; ci.pStages=stages; ci.pVertexInputState=&inputs;
     ci.pInputAssemblyState=&ia; ci.pViewportState=&vp; ci.pRasterizationState=&rs; ci.pMultisampleState=&ms; ci.pColorBlendState=&bs;
