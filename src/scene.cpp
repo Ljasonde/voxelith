@@ -78,6 +78,7 @@ Scene::Scene(Gpu &gpu, World &w) : g(gpu), world(w), passes(gpu), history(gpu) {
     ci.stage.pName = "main";
     check(vkCreateComputePipelines(g.device, VK_NULL_HANDLE, 1, &ci, nullptr, &cull));
     fixed.add([this] { vkDestroyPipeline(g.device, cull, nullptr); });
+    resident.fill(true);
     meshes.resize(Chunks);
     parallelFor(Chunks, [&](int i) { meshes[i] = world.mesh(i); });
     upload();
@@ -156,7 +157,61 @@ void Scene::upload() {
         }
     }
 }
+void Scene::invalidateStream() {
+    if (pending.valid())
+        pending.get();
+    streamRadius = 0;
+}
+void Scene::stream(glm::vec3 eye) {
+    if (pending.valid()) {
+        if (pending.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return;
+        auto updated = pending.get();
+        for (auto &[i, m] : updated)
+            meshes[i] = std::move(m);
+        upload();
+    }
+    glm::ivec2 center =
+        glm::clamp(glm::ivec2(eye.x / Chunk, eye.z / Chunk), glm::ivec2(0), glm::ivec2(Across - 1));
+    if (streamCenter == center && streamRadius == distance)
+        return;
+    streamCenter = center;
+    streamRadius = distance;
+    std::vector<int> load, drop;
+    for (int i = 0; i < Chunks; i++) {
+        if (!world.occupied[i])
+            continue;
+        auto p = World::origin(i);
+        auto delta = glm::vec2(p.x / Chunk - center.x, p.z / Chunk - center.y);
+        bool wanted = glm::dot(delta, delta) <= float((distance + 1) * (distance + 1));
+        if (wanted != resident[i]) {
+            (wanted ? load : drop).push_back(i);
+            resident[i] = wanted;
+        }
+    }
+    if (load.empty() && drop.empty())
+        return;
+    // A snapshot lets edits proceed while the worker pool rebuilds the next ring.
+    pending =
+        std::async(std::launch::async, [snapshot = world, load = std::move(load), drop = std::move(drop)] {
+            std::vector<MeshUpdate> changes(load.size());
+            parallelFor(int(load.size()), [&](int k) {
+                int i = load[k];
+                changes[k] = {i, snapshot.mesh(i)};
+            });
+            for (int i : drop)
+                changes.emplace_back(i, Mesh{});
+            return changes;
+        });
+}
 void Scene::changed(glm::ivec3 p) {
+    if (pending.valid()) {
+        auto updated = pending.get();
+        for (auto &[i, m] : updated)
+            meshes[i] = std::move(m);
+    }
+    streamRadius = 0;
+    resident[World::chunkId(p)] = true;
     world.occupied[World::chunkId(p)] = true;
     glm::ivec3 lo = glm::max(p - 1, glm::ivec3(0)),
                hi = glm::min(p + 1, glm::ivec3(Side - 1, Height - 1, Side - 1));

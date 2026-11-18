@@ -16,7 +16,7 @@
 #include <numeric>
 
 struct Options {
-    bool present=false;
+    bool present = false;
     bool triangle = false, validation = false, benchmark = false, culling = true, rt = true, raw = false,
          hiz = true;
     int width = 1600, height = 900, frames = 0, shot = 0, distance = 12, seed = 241128;
@@ -33,7 +33,8 @@ Options parse(int argc, char **argv) {
                 throw std::runtime_error("Missing value for " + a);
             return std::string(argv[i]);
         };
-        if(a=="--present")o.present=true;
+        if (a == "--present")
+            o.present = true;
         else if (a == "--video-stream")
             o.raw = true;
         else if (a == "--hiz")
@@ -91,7 +92,12 @@ static void bench(Gpu &g, Scene &s, const Options &o) {
     std::vector<Sample> rows;
     std::filesystem::create_directories(o.results);
     for (int i = -120; i < 600; i++) {
-        auto start = Clock::now();if(g.window){glfwPollEvents();if(glfwWindowShouldClose(g.window))throw std::runtime_error("Benchmark window closed");}
+        auto start = Clock::now();
+        if (g.window) {
+            glfwPollEvents();
+            if (glfwWindowShouldClose(g.window))
+                throw std::runtime_error("Benchmark window closed");
+        }
         float t = float(std::max(0, i)) / 60;
         int frame = std::max(i, 0);
         auto camera = tour(float(std::max(0, frame % 150 - 35)) / 30, frame / 150);
@@ -130,7 +136,10 @@ static void bench(Gpu &g, Scene &s, const Options &o) {
          << "\", \"seed\": " << o.seed << ", \"warmup\": 120, \"frames\": 600, \"width\": " << o.width
          << ", \"height\": " << o.height << ", \"scale\": " << o.scale
          << ", \"rt\": " << (s.rt ? "true" : "false") << ", \"culling\": " << (s.culling ? "true" : "false")
-         << ", \"present\": " << (g.window?"true":"false") << ", \"internal_width\": " << s.passes.size.width << ", \"internal_height\": " << s.passes.size.height << ", \"hiz\": " << (s.hiz?"true":"false") << ", \"distance\": " << o.distance << ",\n  \"avg_fps\": " << 600000 / sum
+         << ", \"present\": " << (g.window ? "true" : "false")
+         << ", \"internal_width\": " << s.passes.size.width
+         << ", \"internal_height\": " << s.passes.size.height << ", \"hiz\": " << (s.hiz ? "true" : "false")
+         << ", \"distance\": " << o.distance << ",\n  \"avg_fps\": " << 600000 / sum
          << ", \"p1_ms\": " << percentile(times, .01) << ", \"p99_ms\": " << percentile(times, .99)
          << ", \"avg_ms\": " << sum / 600
          << ", \"avg_gpu_ms\": " << std::accumulate(gpus.begin(), gpus.end(), 0.) / 600
@@ -144,7 +153,7 @@ int launch(int argc, char **argv) {
         auto o = parse(argc, argv);
         if (o.raw)
             _setmode(_fileno(stdout), _O_BINARY);
-        bool window = !o.raw && (!o.benchmark||o.present) && o.capture.empty() && o.sequence.empty();
+        bool window = !o.raw && (!o.benchmark || o.present) && o.capture.empty() && o.sequence.empty();
         {
             Gpu g;
             wchar_t path[32768];

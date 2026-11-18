@@ -46,6 +46,8 @@ void play(Gpu &g, World &world, Scene &scene, const std::filesystem::path &data,
         cursor(true);
     };
     auto refresh = [&]() {
+        scene.invalidateStream();
+        scene.resident.fill(true);
         parallelFor(Chunks, [&](int i) { scene.meshes[i] = world.mesh(i); });
         scene.upload();
     };
@@ -119,8 +121,10 @@ void play(Gpu &g, World &world, Scene &scene, const std::filesystem::path &data,
                 cursor(false);
             }
         }
-        if (started)
+        if (started) {
             cam = {p.eye(), p.forward(), fov};
+            scene.stream(cam.eye);
+        }
         if (mode == Active && !photo) {
             auto d = ImGui::GetForegroundDrawList();
             float x = display.x / 2, y = display.y / 2;

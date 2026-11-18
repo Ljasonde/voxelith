@@ -5,6 +5,7 @@
 #include "hiz.hpp"
 #include "transfer.hpp"
 #include <memory>
+#include <future>
 #include <glm/gtc/matrix_transform.hpp>
 struct Camera {
     glm::vec3 eye{}, dir{};
@@ -46,6 +47,13 @@ struct Scene {
     bool culling = true;
     int distance = 12;
     Scene(Gpu &gpu, World &w);
+    using MeshUpdate = std::pair<int, Mesh>;
+    std::future<std::vector<MeshUpdate>> pending;
+    glm::ivec2 streamCenter{-1000, -1000};
+    int streamRadius = 0;
+    std::array<bool, Chunks> resident{};
+    void stream(glm::vec3 eye);
+    void invalidateStream();
     void upload();
     void changed(glm::ivec3 p);
     View view(Camera cam, float time) const;
