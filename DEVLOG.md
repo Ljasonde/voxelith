@@ -9,3 +9,11 @@ RTX 4060 Laptop 8188 MiB，驱动 621.01，Vulkan SDK 1.4.363.0，MSVC 19.41。1
 生成 416×128×416 的有限群岛，32³ 区块网格按材质与顶点 AO 合并。固定航线实机截图 docs/media/m1.png，validation 0/0。下一步为玩家状态与存档。
 M2：接入玩家、DDA、三核心、传送门、存档和菜单。六项 CPU 测试全部通过，第二遗迹截图为 docs/media/m2.png。原始前向基线位于 docs/benchmarks/forward-*。
 M3/M5：延迟 G-buffer、三层 2048 阴影、半分辨率 SSAO、HDR/Bloom/FXAA；每个非空不透明区块构建 BLAS，双缓冲 TLAS 每帧构建。两条路径各完成一张验证层截图，0 warning / 0 error。Hi-Z 前的 RT 基线见 docs/benchmarks/pre-hiz。
+
+## M4 · GPU 驱动与性能对照
+
+加入双缓冲 Hi-Z 最大深度金字塔。静止相机才消费上一帧深度，移动时保留视锥剔除。相同相机连续 6 帧后，对比 1600×900 直接绘制与间接绘制的 RGBA 读回，最大差值为 0。原始数据含每帧六段 GPU timestamp。
+
+## M5 · 交互、光追与上传
+
+改用设备优先的顶点/索引 arena，传输命令从 staging 复制，上传 fence 完成后释放暂存区。加入 22 层 16×16 像素纹理和常驻 CPU 工作线程。编辑后重建范围涉及受影响的邻区，重新打包及 BLAS 构建仍有同步开销。局部静态阴影缓存和静止相机历史减少重复工作。

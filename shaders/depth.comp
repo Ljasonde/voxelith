@@ -1,0 +1,7 @@
+#version 460
+layout(local_size_x=8,local_size_y=8) in;
+layout(binding=0) uniform sampler2D previous;layout(r32f,binding=1) uniform writeonly image2D result;
+void main(){ivec2 q=ivec2(gl_GlobalInvocationID.xy),outSize=imageSize(result);if(any(greaterThanEqual(q,outSize)))return;
+ ivec2 src=textureSize(previous,0),lo=q*src/outSize,hi=((q+1)*src+outSize-1)/outSize;
+ float z=0;for(int y=lo.y;y<hi.y;y++)for(int x=lo.x;x<hi.x;x++)z=max(z,texelFetch(previous,ivec2(x,y),0).r);
+ imageStore(result,q,vec4(z));}

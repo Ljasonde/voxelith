@@ -1,2 +1,2 @@
 #pragma once
-int launch(int argc,char** argv);
+int launch(int argc, char **argv);

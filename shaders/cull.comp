@@ -5,15 +5,20 @@ struct Cmd {uint count,instanceCount,firstIndex;int vertexOffset;uint firstInsta
 layout(std430,binding=0) readonly buffer Metadata {Chunk chunks[];};
 layout(std430,binding=1) writeonly buffer Output {Cmd draws[];};
 layout(std430,binding=2) buffer Counter {uint visible,triangles;};
+layout(binding=3) uniform sampler2D pyramid;
 layout(push_constant) uniform Params {mat4 vp; vec4 eye; uvec4 num;} p;
 void main(){
  uint i=gl_GlobalInvocationID.x;if(i>=p.num.x)return;
  Chunk c=chunks[i];if(distance(p.eye.xyz,clamp(p.eye.xyz,c.lo.xyz,c.hi.xyz))>p.eye.w)return;
- uint mask=63;
+ uint mask=63;vec2 lo=vec2(1),hi=vec2(0);float nearest=1.;bool valid=true;
  for(int v=0;v<8;v++){vec4 q=p.vp*vec4(mix(c.lo.xyz,c.hi.xyz,bvec3((v&1)!=0,(v&2)!=0,(v&4)!=0)),1);
+  valid=valid&&q.w>0.&&q.z>0.;vec3 projected=q.xyz/max(q.w,.00001);vec2 uv=projected.xy*.5+.5;lo=min(lo,uv);hi=max(hi,uv);nearest=min(nearest,projected.z);
   uint m=uint(q.x < -q.w) | (uint(q.x>q.w)<<1) | (uint(q.y < -q.w)<<2) | (uint(q.y>q.w)<<3) | (uint(q.z<0)<<4) | (uint(q.z>q.w)<<5);
   mask &= m;}
  if(mask!=0)return;
+ if(p.num.y!=0&&valid){lo=clamp(lo,0.,1.);hi=clamp(hi,0.,1.);vec2 span=(hi-lo)*textureSize(pyramid,0);float level=max(0.,ceil(log2(max(1.,max(span.x,span.y)))));
+  float farthest=max(max(textureLod(pyramid,lo,level).r,textureLod(pyramid,hi,level).r),max(textureLod(pyramid,vec2(lo.x,hi.y),level).r,textureLod(pyramid,vec2(hi.x,lo.y),level).r));
+  if(nearest>farthest+.00002)return;}
  uint dst=atomicAdd(visible,1);atomicAdd(triangles,c.draw.x/3);
  draws[dst]=Cmd(c.draw.x,1,c.draw.y,int(c.draw.z),0);
 }

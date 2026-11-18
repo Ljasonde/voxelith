@@ -1,0 +1,4 @@
+{
+  "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU", "seed": 241128, "warmup": 120, "frames": 600, "width": 1920, "height": 1080, "scale": 1, "rt": false, "culling": false, "distance": 12,
+  "avg_fps": 244.06052, "p1_ms": 2.9472, "p99_ms": 9.7977, "avg_ms": 4.0973443, "avg_gpu_ms": 3.8064768, "chunks": 167, "triangles": 544540
+}
