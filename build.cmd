@@ -8,6 +8,7 @@ if not defined VULKAN_SDK for /f "tokens=2,*" %%a in ('reg query "HKLM\SYSTEM\Cu
 set "VSROOT="
 for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSROOT=%%i"
 if not defined VSROOT set "VSROOT=%ProgramFiles%\Microsoft Visual Studio\2022\Community"
+set "VSLANG=1033"
 call "%VSROOT%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
 set "VOX_DRIVE="
 rem The VS 2022 CMake build crashes in compiler discovery on some CJK paths.

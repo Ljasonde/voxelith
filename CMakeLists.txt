@@ -33,7 +33,7 @@ add_library(gui STATIC ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_d
 target_include_directories(gui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${volk_SOURCE_DIR} ${vma_SOURCE_DIR}/include ${stb_SOURCE_DIR} ${Vulkan_INCLUDE_DIRS})
 target_compile_definitions(gui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK GLFW_INCLUDE_NONE VK_NO_PROTOTYPES VMA_STATIC_VULKAN_FUNCTIONS=0 VMA_DYNAMIC_VULKAN_FUNCTIONS=1)
 target_link_libraries(gui PUBLIC glfw)
-add_executable(Voxelith src/main.cpp src/renderer.cpp src/gpu.cpp)
+add_executable(Voxelith src/main.cpp src/renderer.cpp src/gpu.cpp src/world.cpp src/scene.cpp)
 target_compile_options(Voxelith PRIVATE /utf-8 /W4)
 target_compile_definitions(Voxelith PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE NOMINMAX)
 target_include_directories(Voxelith PRIVATE ${glm_SOURCE_DIR} ${noise_SOURCE_DIR}/Cpp)
@@ -43,11 +43,12 @@ foreach(src IN LISTS shaders)
   get_filename_component(name "${src}" NAME)
   set(bin "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/${name}.spv")
   add_custom_command(OUTPUT "${bin}" COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders"
-    COMMAND Vulkan::glslc --target-env=vulkan1.3 -O "${src}" -o "${bin}" DEPENDS "${src}" VERBATIM)
+    COMMAND Vulkan::glslc --target-env=vulkan1.3 -O "${src}" -o "${bin}" DEPENDS "${src}" "${CMAKE_SOURCE_DIR}/shaders/shared.glsl" VERBATIM)
   list(APPEND spv "${bin}")
 endforeach()
 add_custom_target(shaders ALL DEPENDS ${spv})
 add_dependencies(Voxelith shaders)
 enable_testing()
+
 
 
