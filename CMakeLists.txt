@@ -33,7 +33,7 @@ add_library(gui STATIC ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_d
 target_include_directories(gui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${volk_SOURCE_DIR} ${vma_SOURCE_DIR}/include ${stb_SOURCE_DIR} ${Vulkan_INCLUDE_DIRS})
 target_compile_definitions(gui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK GLFW_INCLUDE_NONE VK_NO_PROTOTYPES VMA_STATIC_VULKAN_FUNCTIONS=0 VMA_DYNAMIC_VULKAN_FUNCTIONS=1)
 target_link_libraries(gui PUBLIC glfw)
-add_executable(Voxelith src/main.cpp src/renderer.cpp src/gpu.cpp src/world.cpp src/scene.cpp)
+add_executable(Voxelith src/main.cpp src/renderer.cpp src/gpu.cpp src/world.cpp src/scene.cpp src/player.cpp src/game.cpp)
 target_compile_options(Voxelith PRIVATE /utf-8 /W4)
 target_compile_definitions(Voxelith PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE NOMINMAX)
 target_include_directories(Voxelith PRIVATE ${glm_SOURCE_DIR} ${noise_SOURCE_DIR}/Cpp)
@@ -52,3 +52,10 @@ enable_testing()
 
 
 
+
+add_executable(world_tests tests/world_tests.cpp src/world.cpp src/player.cpp)
+target_compile_definitions(world_tests PRIVATE NOMINMAX)
+target_include_directories(world_tests PRIVATE src ${glm_SOURCE_DIR} ${noise_SOURCE_DIR}/Cpp)
+foreach(case mesh dda aabb noise quest save)
+  add_test(NAME ${case} COMMAND world_tests ${case})
+endforeach()
