@@ -1,0 +1,10 @@
+build/
+out/
+captures/
+saves/
+*.spv
+*.exe
+*.user
+.vs/
+imgui.ini
+
