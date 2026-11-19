@@ -9,7 +9,7 @@ struct Uniforms {
     glm::vec4 eyeTime, dir, right, up, settings;
 };
 struct Surfaces {
-    Image albedo, normal, depth, ao, hdr;
+    Image albedo, normal, depth, ao, hdr, waterDepth;
     std::array<Image, 6> bloom;
     std::array<Image, 3> shadow;
     Buffer uniform;
@@ -17,6 +17,7 @@ struct Surfaces {
     std::array<glm::vec3, 3> centers{};
     std::array<glm::mat4, 3> matrices{};
     std::array<bool, 3> cached{};
+    float solarPhase = -1000;
 };
 struct Passes {
     Gpu &g;
@@ -26,7 +27,7 @@ struct Passes {
     VkSampler point{}, linear{};
     VkDescriptorSetLayout setLayout{}, rtSetLayout{};
     VkPipelineLayout layout{}, rtLayout{}, shadowLayout{};
-    VkPipeline light{}, traced{}, ssao{}, post{}, shadow{};
+    VkPipeline light{}, traced{}, ssao{}, post{}, shadow{}, water{}, waterRT{};
     explicit Passes(Gpu &gpu) : g(gpu) {}
     void init();
     void allocate(Scene &s);

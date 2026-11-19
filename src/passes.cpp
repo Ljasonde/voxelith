@@ -68,7 +68,8 @@ void Passes::init() {
         for (uint32_t i = 0; i < 15; i++)
             b.push_back(
                 {i, i == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1,
-                 VK_SHADER_STAGE_FRAGMENT_BIT, nullptr});
+                 VkShaderStageFlags(VK_SHADER_STAGE_FRAGMENT_BIT | (i == 0 ? VK_SHADER_STAGE_VERTEX_BIT : 0)),
+                 nullptr});
         if (rt)
             b.push_back({15, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
                          nullptr});
@@ -104,6 +105,12 @@ void Passes::init() {
     empty.pVertexBindingDescriptions = &bind;
     empty.pVertexAttributeDescriptions = &a;
     shadow = g.graphics(fixed, shadowLayout, "shadow.vert", "shadow.frag", empty, true, 2);
+    VkVertexInputAttributeDescription attrs[] = {a, {1, 0, VK_FORMAT_R32_UINT, 12}};
+    empty.pVertexAttributeDescriptions = attrs;
+    empty.vertexAttributeDescriptionCount = 2;
+    water = g.graphics(fixed, layout, "water.vert", "water.frag", empty, true, 3);
+    if (g.rayCapable)
+        waterRT = g.graphics(fixed, rtLayout, "water.vert", "water_rt.frag", empty, true, 3);
 }
 void Passes::allocate(Scene &s) {
     VkExtent2D desired{uint32_t(g.size.width * s.scale), uint32_t(g.size.height * s.scale)};
@@ -136,6 +143,7 @@ void Passes::allocate(Scene &s) {
         t.albedo = make(g.format, size);
         t.normal = make(g.format, size);
         t.depth = make(VK_FORMAT_D32_SFLOAT, size, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        t.waterDepth = make(VK_FORMAT_D32_SFLOAT, size, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
         t.ao = make(g.format, smaller(size));
         t.hdr = make(VK_FORMAT_R16G16B16A16_SFLOAT, size,
                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
@@ -208,7 +216,14 @@ void Passes::start(Scene &s, Frame &f, int slot, const View &v, bool rt) {
     u.dir = v.direction;
     u.up = v.up;
     u.right = v.right;
-    u.settings = {s.shadows ? 1.f : 0.f, 0, 0, 0};
+    float phase = std::floor(s.solarPhase * 240.f) / 240.f;
+    if (t.solarPhase != phase) {
+        t.cached.fill(false);
+        t.solarPhase = phase;
+    }
+    u.settings = {s.shadows ? 1.f : 0.f, phase, 0, 0};
+    float cosine = std::cos(phase), sine = std::sin(phase);
+    glm::vec3 sunDirection(-.584f * cosine - .648f * sine, -.584f * sine + .648f * cosine, -.488f);
     for (int i = 0; i < 3; i++) {
         float r = std::array<float, 3>{32, 96, 256}[i];
         auto focus = glm::vec3(v.eyeTime) + glm::vec3(v.direction) * r * .38f;
@@ -216,7 +231,7 @@ void Passes::start(Scene &s, Frame &f, int slot, const View &v, bool rt) {
             u.light[i] = t.matrices[i];
             continue;
         }
-        auto lightDir = glm::normalize(glm::vec3(-.584, .648, -.488));
+        auto lightDir = glm::normalize(sunDirection.y >= 0 ? sunDirection : -sunDirection);
         auto proj = glm::ortho(-r, r, -r, r, 1.f, 650.f);
         proj[1][1] *= -1;
         u.light[i] = proj * glm::lookAt(focus + lightDir * 320.f, focus, glm::vec3(0, 1, 0));
@@ -284,6 +299,23 @@ void Passes::finish(Scene &s, Frame &f, int slot, bool rt) {
     }
     timestamp(f, 5);
     full(t.hdr, size, rt ? traced : light, rt ? rtLayout : layout, rt ? t.rtSet : t.set);
+    if (s.waterCount) {
+        transition(cmd, t.hdr.handle, 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, colStage, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                   colStage, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+        attach(cmd, t.waterDepth, true);
+        auto color = attachment(t.hdr, false), depth = attachment(t.waterDepth, true);
+        color.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        begin(cmd, size, &color, 1, &depth);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rt ? waterRT : water);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, rt ? rtLayout : layout, 0, 1,
+                                rt ? &t.rtSet : &t.set, 0, nullptr);
+        VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers(cmd, 0, 1, &s.vertices.handle, &offset);
+        vkCmdBindIndexBuffer(cmd, s.waterIndices.handle, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(cmd, s.waterCount, 1, 0, 0, 0);
+        vkCmdEndRendering(cmd);
+    }
     timestamp(f, 6);
     transition(cmd, t.hdr.handle, 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, colStage, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,

@@ -20,12 +20,15 @@ struct Options {
     bool triangle = false, validation = false, benchmark = false, culling = true, rt = true, raw = false,
          hiz = true;
     int width = 1600, height = 900, frames = 0, shot = 0, distance = 12, seed = 241128;
-    float scale = 1;
+    float scale = 1, phase = 0;
     std::filesystem::path capture, results, sequence;
     bool seedSpecified = false;
 };
 Options parse(int argc, char **argv) {
     Options o;
+#ifndef NDEBUG
+    o.validation = true;
+#endif
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         auto value = [&]() {
@@ -39,6 +42,8 @@ Options parse(int argc, char **argv) {
             o.raw = true;
         else if (a == "--hiz")
             o.hiz = std::stoi(value()) != 0;
+        else if (a == "--phase")
+            o.phase = std::stof(value());
         else if (a == "--triangle")
             o.triangle = true;
         else if (a == "--validation")
@@ -47,7 +52,7 @@ Options parse(int argc, char **argv) {
             o.benchmark = true;
             o.results = (i + 1 < argc && argv[i + 1][0] != '-') ? value() : "benchmarks";
         } else if (a == "--capture")
-            o.capture = value();
+            o.capture = (i + 1 < argc && argv[i + 1][0] != '-') ? value() : "captures/voxelith.png";
         else if (a == "--sequence")
             o.sequence = value();
         else if (a == "--frames")
@@ -190,6 +195,7 @@ int launch(int argc, char **argv) {
                 s.distance = o.distance;
                 s.rt = o.rt && g.rayCapable;
                 s.scale = o.scale;
+                s.solarPhase = o.phase;
                 s.hiz = o.hiz;
                 g.timingScene = true;
                 g.rawOutput = o.raw;

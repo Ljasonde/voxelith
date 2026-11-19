@@ -88,7 +88,7 @@ void Scene::upload() {
     geometry.clear();
     chunks.clear();
     std::vector<Vertex> verts;
-    std::vector<uint32_t> inds;
+    std::vector<uint32_t> inds, water;
     for (int i = 0; i < Chunks; i++) {
         auto &m = meshes[i];
         if (m.indices.empty())
@@ -102,7 +102,13 @@ void Scene::upload() {
                           glm::vec4(hi, 0),
                           {uint32_t(m.indices.size()), uint32_t(inds.size()), uint32_t(verts.size()), 0}});
         verts.insert(verts.end(), m.vertices.begin(), m.vertices.end());
-        inds.insert(inds.end(), m.indices.begin(), m.indices.end());
+        for (auto index : m.indices) {
+            if ((m.vertices[index].face & 255) == Water)
+                water.push_back(index + chunks.back().draw.z);
+            else
+                inds.push_back(index);
+        }
+        chunks.back().draw.x = uint32_t(inds.size()) - chunks.back().draw.y;
     }
     uploads = std::make_unique<UploadBatch>(g);
     auto make = [&](auto &data, VkBufferUsageFlags flags) {
@@ -117,9 +123,12 @@ void Scene::upload() {
         all.push_back({c.draw.x, 1, c.draw.y, int(c.draw.z), 0});
     allDraws = make(all, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
     indices = make(inds, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    waterCount = uint32_t(water.size());
+    if (waterCount)
+        waterIndices = make(water, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
     info = make(chunks, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     uploads->submit();
-    triangles = uint32_t(inds.size() / 3);
+    triangles = uint32_t((inds.size() + water.size()) / 3);
     if (g.rayCapable)
         rays.build(g, meshes, vertices);
     passes.size = {};

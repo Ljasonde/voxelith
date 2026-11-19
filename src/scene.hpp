@@ -32,6 +32,7 @@ struct Scene {
     glm::mat4 currentVP{};
     bool hiz = true;
     bool rt = false, shadows = true;
+    float solarPhase = 0;
     float scale = 1;
     VkPipelineLayout layout{}, computeLayout{};
     VkPipeline terrain{}, sky{}, cull{};
@@ -39,7 +40,8 @@ struct Scene {
     VkDescriptorSet atlasSet{};
     VkDescriptorSetLayout cullSetLayout{};
     std::array<VkDescriptorSet, 2> sets{};
-    Buffer vertices, indices, info, allDraws;
+    Buffer vertices, indices, info, allDraws, waterIndices;
+    uint32_t waterCount = 0;
     std::array<Buffer, 2> commands, counts;
     std::vector<ChunkInfo> chunks;
     std::vector<Mesh> meshes;

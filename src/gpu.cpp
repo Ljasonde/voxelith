@@ -539,7 +539,8 @@ bool Gpu::draw(const std::function<void(Frame &)> &record, const std::filesystem
                                &copy);
     }
     if (window) {
-        transition(f.cmd, images[idx], 1, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
+        // Chain the layout transition after the acquired-image semaphore wait.
+        transition(f.cmd, images[idx], 1, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                    0, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
         VkImageBlit blit{};
         blit.srcSubresource = blit.dstSubresource = {1, 0, 0, 1};

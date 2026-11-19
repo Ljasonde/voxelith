@@ -26,6 +26,7 @@ void main(){vec2 uv=ndc*.5+.5;float z=texture(depthMap,uv).r;vec3 rd=normalize(g
  float acc=0.,weight=0.;for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 q=uv+vec2(x,y)/vec2(textureSize(aoMap,0));float w=exp(-length(position(q,texture(depthMap,q).r)-p)*2.);acc+=texture(aoMap,q).r*w;weight+=w;}ao=acc/max(.001,weight);
 #endif
  vec3 light=vec3(.32,.41,.52)*(.65+.35*max(0.,n.y))*ao*surface.a+vec3(1.76,1.32,.89)*ndl*shade;
+ if(g.settings.y!=0.)light*=mix(vec3(.065,.10,.18),vec3(1),smoothstep(-.15,.40,sun.y));
  vec3 lit=base*light;
  if(id==8)lit+=base*vec3(.12,.065,.06);
  if(id==14||id==15||id==10||id>=18)lit+=base*(id>=18?5.:2.9);

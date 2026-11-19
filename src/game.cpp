@@ -122,6 +122,7 @@ void play(Gpu &g, World &world, Scene &scene, const std::filesystem::path &data,
             }
         }
         if (started) {
+            scene.solarPhase = clock * .004f;
             cam = {p.eye(), p.forward(), fov};
             scene.stream(cam.eye);
         }
@@ -173,6 +174,7 @@ void play(Gpu &g, World &world, Scene &scene, const std::filesystem::path &data,
                 ImGui::Spacing();
                 if (std::filesystem::exists(path) && button("Continue expedition")) {
                     if (p.load(world, path)) {
+                        clock = p.elapsed;
                         refresh();
                         enter();
                     } else
